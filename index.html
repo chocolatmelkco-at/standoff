@@ -3,86 +3,38 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>2-Player Mobile & Desktop Duel</title>
+  <title>2-Player Duel with Cover & Ragdolls</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
     html, body {
-      width: 100%;
-      height: 100%;
-      background: #111;
-      color: #fff;
+      width: 100%; height: 100%;
+      background: #111; color: #fff;
       font-family: system-ui, sans-serif;
       overflow: hidden;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
       touch-action: none;
     }
-    #game-container {
-      position: relative;
-      width: 100vw;
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
-    }
+    #game-container { position: relative; width: 100vw; height: 100vh; display: flex; flex-direction: column; }
     #scoreboard {
-      height: 40px;
-      display: flex;
-      justify-content: space-around;
-      align-items: center;
-      background: #181818;
-      font-size: 16px;
-      font-weight: bold;
-      border-bottom: 2px solid #333;
+      height: 40px; display: flex; justify-content: space-around; align-items: center;
+      background: #181818; font-size: 16px; font-weight: bold; border-bottom: 2px solid #333;
     }
-    #canvas-wrapper {
-      flex: 1;
-      position: relative;
-      width: 100%;
-    }
-    canvas {
-      display: block;
-      width: 100%;
-      height: 100%;
-      background: #222;
-    }
-    /* Mobile Controls */
+    #canvas-wrapper { flex: 1; position: relative; width: 100%; }
+    canvas { display: block; width: 100%; height: 100%; background: #1a1a1a; }
     .mobile-controls {
-      position: absolute;
-      bottom: 10px;
-      width: 100%;
-      display: flex;
-      justify-content: space-between;
-      padding: 0 15px;
-      pointer-events: none;
+      position: absolute; bottom: 10px; width: 100%;
+      display: flex; justify-content: space-between; padding: 0 15px; pointer-events: none;
     }
-    .control-group {
-      display: flex;
-      gap: 10px;
-      pointer-events: auto;
-    }
+    .control-group { display: flex; gap: 6px; pointer-events: auto; }
     .btn {
-      width: 55px;
-      height: 55px;
-      background: rgba(255, 255, 255, 0.15);
-      border: 2px solid rgba(255, 255, 255, 0.4);
-      border-radius: 50%;
-      color: #fff;
-      font-size: 18px;
-      font-weight: bold;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      touch-action: manipulation;
+      width: 48px; height: 48px; background: rgba(255, 255, 255, 0.15);
+      border: 2px solid rgba(255, 255, 255, 0.4); border-radius: 50%;
+      color: #fff; font-size: 16px; font-weight: bold;
+      display: flex; align-items: center; justify-content: center; touch-action: manipulation;
     }
-    .btn:active {
-      background: rgba(255, 255, 255, 0.4);
-    }
-    .btn-shoot {
-      border-radius: 12px;
-      width: 65px;
-    }
+    .btn:active { background: rgba(255, 255, 255, 0.4); }
+    .btn-shoot { border-radius: 12px; width: 55px; }
     .p1-color { color: #4da6ff; }
     .p2-color { color: #ff4d4d; }
   </style>
@@ -98,9 +50,10 @@
     <div id="canvas-wrapper">
       <canvas id="gameCanvas"></canvas>
 
-      <!-- Mobile Touch Controls Overlay -->
       <div class="mobile-controls">
         <div class="control-group">
+          <div class="btn" id="btn-p1-left">◄</div>
+          <div class="btn" id="btn-p1-right">►</div>
           <div class="btn" id="btn-p1-jump">▲</div>
           <div class="btn" id="btn-p1-duck">▼</div>
           <div class="btn btn-shoot p1-color" id="btn-p1-shoot" style="border-color:#4da6ff;">FIRE</div>
@@ -109,6 +62,8 @@
           <div class="btn btn-shoot p2-color" id="btn-p2-shoot" style="border-color:#ff4d4d;">FIRE</div>
           <div class="btn" id="btn-p2-duck">▼</div>
           <div class="btn" id="btn-p2-jump">▲</div>
+          <div class="btn" id="btn-p1-left2" id="btn-p2-left">◄</div>
+          <div class="btn" id="btn-p2-right">►</div>
         </div>
       </div>
     </div>
@@ -119,7 +74,6 @@
     const ctx = canvas.getContext('2d');
     const wrapper = document.getElementById('canvas-wrapper');
 
-    // Internal Virtual Resolution for Physics Calculation
     const V_WIDTH = 800;
     const V_HEIGHT = 450;
     const GROUND_Y = V_HEIGHT - 30;
@@ -133,69 +87,80 @@
     resizeCanvas();
 
     const input = {
-      p1Jump: false, p1Duck: false, p1Shoot: false,
-      p2Jump: false, p2Duck: false, p2Shoot: false
+      p1Left: false, p1Right: false, p1Jump: false, p1Duck: false, p1Shoot: false,
+      p2Left: false, p2Right: false, p2Jump: false, p2Duck: false, p2Shoot: false
     };
 
     const standingHeight = 60;
     const duckingHeight = 30;
 
     const player1 = {
-      x: 50,
-      y: GROUND_Y - standingHeight,
-      vy: 0,
-      width: 25,
-      height: standingHeight,
-      color: '#4da6ff',
-      score: 0,
-      hp: 100,
-      isGrounded: true,
-      isDucking: false,
-      lastShot: 0
+      id: 1, x: 50, y: GROUND_Y - standingHeight, vx: 0, vy: 0,
+      width: 25, height: standingHeight, color: '#4da6ff',
+      score: 0, hp: 100, isGrounded: true, isDucking: false, lastShot: 0
     };
 
     const player2 = {
-      x: V_WIDTH - 75,
-      y: GROUND_Y - standingHeight,
-      vy: 0,
-      width: 25,
-      height: standingHeight,
-      color: '#ff4d4d',
-      score: 0,
-      hp: 100,
-      isGrounded: true,
-      isDucking: false,
-      lastShot: 0
+      id: 2, x: V_WIDTH - 75, y: GROUND_Y - standingHeight, vx: 0, vy: 0,
+      width: 25, height: standingHeight, color: '#ff4d4d',
+      score: 0, hp: 100, isGrounded: true, isDucking: false, lastShot: 0
     };
 
     let bullets = [];
-    const FIRE_RATE = 300; // ms
+    let obstacles = [];
+    let ragdolls = [];
+    let roundOverTimer = 0;
+    const FIRE_RATE = 300;
+
+    function generateObstacles() {
+      obstacles = [];
+      const numObstacles = Math.floor(Math.random() * 3) + 2; // 2 to 4 obstacles
+      for (let i = 0; i < numObstacles; i++) {
+        const width = 30 + Math.random() * 25;
+        const height = 60 + Math.random() * 80;
+        const x = 200 + Math.random() * (V_WIDTH - 400 - width);
+        const y = GROUND_Y - height - Math.random() * 100;
+        const vy = (Math.random() - 0.5) * 2; // vertical float speed
+        obstacles.push({ x, y, width, height, vy, minY: 100, maxY: GROUND_Y - height, hp: 15 });
+      }
+    }
 
     // Keyboard Listeners
     window.addEventListener('keydown', (e) => {
-      if (['Space', 'ArrowUp', 'ArrowDown', 'KeyW', 'KeyS'].includes(e.code)) e.preventDefault();
+      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyW', 'KeyS', 'KeyA', 'KeyD', 'KeyE'].includes(e.code)) e.preventDefault();
+      
+      // Player 1 (A/D/W/S/E)
+      if (e.code === 'KeyA') input.p1Left = true;
+      if (e.code === 'KeyD') input.p1Right = true;
       if (e.code === 'KeyW') input.p1Jump = true;
       if (e.code === 'KeyS') input.p1Duck = true;
-      if (e.code === 'Space') input.p1Shoot = true;
+      if (e.code === 'KeyE') input.p1Shoot = true;
 
+      // Player 2 (Arrows/Space)
+      if (e.code === 'ArrowLeft') input.p2Left = true;
+      if (e.code === 'ArrowRight') input.p2Right = true;
       if (e.code === 'ArrowUp') input.p2Jump = true;
       if (e.code === 'ArrowDown') input.p2Duck = true;
-      if (e.code === 'Enter') input.p2Shoot = true;
+      if (e.code === 'Space') input.p2Shoot = true;
     });
 
     window.addEventListener('keyup', (e) => {
+      if (e.code === 'KeyA') input.p1Left = false;
+      if (e.code === 'KeyD') input.p1Right = false;
       if (e.code === 'KeyW') input.p1Jump = false;
       if (e.code === 'KeyS') input.p1Duck = false;
-      if (e.code === 'Space') input.p1Shoot = false;
+      if (e.code === 'KeyE') input.p1Shoot = false;
 
+      if (e.code === 'ArrowLeft') input.p2Left = false;
+      if (e.code === 'ArrowRight') input.p2Right = false;
       if (e.code === 'ArrowUp') input.p2Jump = false;
       if (e.code === 'ArrowDown') input.p2Duck = false;
-      if (e.code === 'Enter') input.p2Shoot = false;
+      if (e.code === 'Space') input.p2Shoot = false;
     });
 
-    // Touch Button Handler Utility
     function bindTouch(elementId, actionKey) {
       const btn = document.getElementById(elementId);
+      if (!btn) return;
       const start = (e) => { e.preventDefault(); input[actionKey] = true; };
       const end = (e) => { e.preventDefault(); input[actionKey] = false; };
       btn.addEventListener('touchstart', start);
@@ -204,14 +169,59 @@
       btn.addEventListener('mouseup', end);
     }
 
+    bindTouch('btn-p1-left', 'p1Left');
+    bindTouch('btn-p1-right', 'p1Right');
     bindTouch('btn-p1-jump', 'p1Jump');
     bindTouch('btn-p1-duck', 'p1Duck');
     bindTouch('btn-p1-shoot', 'p1Shoot');
+    bindTouch('btn-p2-left2', 'p2Left');
+    bindTouch('btn-p2-right', 'p2Right');
     bindTouch('btn-p2-jump', 'p2Jump');
     bindTouch('btn-p2-duck', 'p2Duck');
     bindTouch('btn-p2-shoot', 'p2Shoot');
 
-    function updatePlayer(p, isJump, isDuck, isShoot, direction) {
+    function createRagdoll(x, y, color, hitDirection) {
+      const parts = [
+        { name: 'head', x: x + 12, y: y, vx: hitDirection * 5, vy: -6, radius: 8 },
+        { name: 'torso', x: x + 12, y: y + 20, vx: hitDirection * 4, vy: -4, radius: 10 },
+        { name: 'lArm', x: x + 5, y: y + 15, vx: hitDirection * 3 - 2, vy: -5, radius: 5 },
+        { name: 'rArm', x: x + 20, y: y + 15, vx: hitDirection * 6 + 2, vy: -3, radius: 5 },
+        { name: 'lLeg', x: x + 8, y: y + 40, vx: hitDirection * 2 - 1, vy: -2, radius: 6 },
+        { name: 'rLeg', x: x + 16, y: y + 40, vx: hitDirection * 5 + 1, vy: -4, radius: 6 }
+      ];
+      ragdolls.push({ parts, color });
+    }
+
+    function updateRagdolls() {
+      ragdolls.forEach(r => {
+        r.parts.forEach(p => {
+          p.vy += GRAVITY * 0.8;
+          p.x += p.vx;
+          p.y += p.vy;
+          p.vx *= 0.98; // Drag
+
+          // Ground bounce
+          if (p.y >= GROUND_Y - p.radius) {
+            p.y = GROUND_Y - p.radius;
+            p.vy = -p.vy * 0.4;
+            p.vx *= 0.7;
+          }
+        });
+      });
+    }
+
+    function updatePlayer(p, isLeft, isRight, isJump, isDuck, isShoot, direction, minX, maxX) {
+      if (p.hp <= 0) return;
+
+      // Horizontal Movement
+      if (isLeft) p.vx = -4;
+      else if (isRight) p.vx = 4;
+      else p.vx = 0;
+
+      p.x += p.vx;
+      if (p.x < minX) p.x = minX;
+      if (p.x > maxX - p.width) p.x = maxX - p.width;
+
       // Ducking Logic
       if (isDuck && p.isGrounded) {
         if (!p.isDucking) {
@@ -229,15 +239,14 @@
 
       // Jump Logic
       if (isJump && p.isGrounded && !p.isDucking) {
-        p.vy = -13;
+        p.vy = -12;
         p.isGrounded = false;
       }
 
-      // Physics Gravity
+      // Gravity Physics
       if (!p.isGrounded) {
         p.vy += GRAVITY;
         p.y += p.vy;
-
         if (p.y >= GROUND_Y - p.height) {
           p.y = GROUND_Y - p.height;
           p.vy = 0;
@@ -252,11 +261,9 @@
           bullets.push({
             x: direction === 1 ? p.x + p.width : p.x,
             y: p.y + (p.isDucking ? 10 : 18),
-            width: 12,
-            height: 6,
-            speed: 12 * direction,
-            color: p.color,
-            owner: p
+            width: 10, height: 5,
+            speed: 13 * direction,
+            color: p.color, owner: p
           });
           p.lastShot = now;
         }
@@ -264,47 +271,86 @@
     }
 
     function resetRound() {
-      player1.hp = 100;
-      player2.hp = 100;
-      player1.y = GROUND_Y - standingHeight;
-      player2.y = GROUND_Y - standingHeight;
-      player1.vy = 0;
-      player2.vy = 0;
-      bullets = [];
+      player1.hp = 100; player2.hp = 100;
+      player1.x = 50; player1.y = GROUND_Y - standingHeight;
+      player2.x = V_WIDTH - 75; player2.y = GROUND_Y - standingHeight;
+      player1.vy = 0; player2.vy = 0;
+      bullets = []; ragdolls = []; roundOverTimer = 0;
+      generateObstacles();
       updateUI();
     }
 
     function updateUI() {
-      document.getElementById('p1Hp').innerText = player1.hp;
+      document.getElementById('p1Hp').innerText = Math.max(0, player1.hp);
       document.getElementById('p1Score').innerText = player1.score;
-      document.getElementById('p2Hp').innerText = player2.hp;
+      document.getElementById('p2Hp').innerText = Math.max(0, player2.hp);
       document.getElementById('p2Score').innerText = player2.score;
     }
 
     function update() {
-      updatePlayer(player1, input.p1Jump, input.p1Duck, input.p1Shoot, 1);
-      updatePlayer(player2, input.p2Jump, input.p2Duck, input.p2Shoot, -1);
+      if (roundOverTimer > 0) {
+        roundOverTimer--;
+        updateRagdolls();
+        if (roundOverTimer <= 0) resetRound();
+        return;
+      }
+
+      // Update Moving Obstacles
+      obstacles.forEach(o => {
+        o.y += o.vy;
+        if (o.y < o.minY || o.y > o.maxY) o.vy = -o.vy;
+      });
+
+      // Update Players (Player 1 bounded to left side, Player 2 to right side)
+      updatePlayer(player1, input.p1Left, input.p1Right, input.p1Jump, input.p1Duck, input.p1Shoot, 1, 0, V_WIDTH / 2 - 20);
+      updatePlayer(player2, input.p2Left, input.p2Right, input.p2Jump, input.p2Duck, input.p2Shoot, -1, V_WIDTH / 2 + 20, V_WIDTH);
 
       // Bullet Updates & Collisions
       for (let i = bullets.length - 1; i >= 0; i--) {
         const b = bullets[i];
         b.x += b.speed;
 
+        // Obstacle Collisions
+        let hitObs = false;
+        for (let j = obstacles.length - 1; j >= 0; j--) {
+          const o = obstacles[j];
+          if (b.x < o.x + o.width && b.x + b.width > o.x && b.y < o.y + o.height && b.y + b.height > o.y) {
+            o.hp -= 1;
+            if (o.hp <= 0) obstacles.splice(j, 1);
+            bullets.splice(i, 1);
+            hitObs = true;
+            break;
+          }
+        }
+        if (hitObs) continue;
+
         // Hit Player 1
-        if (b.owner !== player1 && b.x < player1.x + player1.width && b.x + b.width > player1.x &&
+        if (b.owner !== player1 && player1.hp > 0 &&
+            b.x < player1.x + player1.width && b.x + b.width > player1.x &&
             b.y < player1.y + player1.height && b.y + b.height > player1.y) {
           player1.hp -= 20;
           bullets.splice(i, 1);
-          if (player1.hp <= 0) { player2.score++; resetRound(); } else { updateUI(); }
+          updateUI();
+          if (player1.hp <= 0) {
+            player2.score++;
+            createRagdoll(player1.x, player1.y, player1.color, -1);
+            roundOverTimer = 90; // ~1.5s delay for ragdoll physics
+          }
           continue;
         }
 
         // Hit Player 2
-        if (b.owner !== player2 && b.x + b.width > player2.x && b.x < player2.x + player2.width &&
+        if (b.owner !== player2 && player2.hp > 0 &&
+            b.x + b.width > player2.x && b.x < player2.x + player2.width &&
             b.y < player2.y + player2.height && b.y + b.height > player2.y) {
           player2.hp -= 20;
           bullets.splice(i, 1);
-          if (player2.hp <= 0) { player1.score++; resetRound(); } else { updateUI(); }
+          updateUI();
+          if (player2.hp <= 0) {
+            player1.score++;
+            createRagdoll(player2.x, player2.y, player2.color, 1);
+            roundOverTimer = 90;
+          }
           continue;
         }
 
@@ -313,35 +359,52 @@
     }
 
     function draw() {
-      // Clear screen
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Scale Canvas drawing to match Virtual Resolution
       const scaleX = canvas.width / V_WIDTH;
       const scaleY = canvas.height / V_HEIGHT;
 
       ctx.save();
       ctx.scale(scaleX, scaleY);
 
-      // Draw Ground
-      ctx.fillStyle = '#333';
+      // Ground
+      ctx.fillStyle = '#2b2b2b';
       ctx.fillRect(0, GROUND_Y, V_WIDTH, V_HEIGHT - GROUND_Y);
 
-      // Draw Center Line
-      ctx.strokeStyle = '#444';
+      // Center Divider
+      ctx.strokeStyle = '#333';
       ctx.setLineDash([8, 8]);
       ctx.beginPath();
-      ctx.moveTo(V_WIDTH / 2, 0);
-      ctx.lineTo(V_WIDTH / 2, GROUND_Y);
-      ctx.stroke();
-      ctx.setLineDash([]);
+      ctx.moveTo(V_WIDTH / 2, 0); ctx.lineTo(V_WIDTH / 2, GROUND_Y);
+      ctx.stroke(); ctx.setLineDash([]);
 
-      // Draw Players
-      ctx.fillStyle = player1.color;
-      ctx.fillRect(player1.x, player1.y, player1.width, player1.height);
+      // Draw Moving Obstacles
+      obstacles.forEach(o => {
+        ctx.fillStyle = '#555';
+        ctx.fillRect(o.x, o.y, o.width, o.height);
+        ctx.strokeStyle = '#777';
+        ctx.strokeRect(o.x, o.y, o.width, o.height);
+      });
 
-      ctx.fillStyle = player2.color;
-      ctx.fillRect(player2.x, player2.y, player2.width, player2.height);
+      // Draw Players (If alive)
+      if (player1.hp > 0) {
+        ctx.fillStyle = player1.color;
+        ctx.fillRect(player1.x, player1.y, player1.width, player1.height);
+      }
+      if (player2.hp > 0) {
+        ctx.fillStyle = player2.color;
+        ctx.fillRect(player2.x, player2.y, player2.width, player2.height);
+      }
+
+      // Draw Ragdolls
+      ragdolls.forEach(r => {
+        ctx.fillStyle = r.color;
+        r.parts.forEach(p => {
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+          ctx.fill();
+        });
+      });
 
       // Draw Bullets
       bullets.forEach(b => {
@@ -358,6 +421,7 @@
       requestAnimationFrame(loop);
     }
 
+    generateObstacles();
     requestAnimationFrame(loop);
   </script>
 </body>
