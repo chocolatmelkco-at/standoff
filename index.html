@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>2-Player Duel with Cover & Ragdolls</title>
+  <title>2-Player Local Duel</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
     html, body {
@@ -24,17 +24,17 @@
     canvas { display: block; width: 100%; height: 100%; background: #1a1a1a; }
     .mobile-controls {
       position: absolute; bottom: 10px; width: 100%;
-      display: flex; justify-content: space-between; padding: 0 15px; pointer-events: none;
+      display: flex; justify-content: space-between; padding: 0 10px; pointer-events: none;
     }
-    .control-group { display: flex; gap: 6px; pointer-events: auto; }
+    .control-group { display: flex; gap: 4px; pointer-events: auto; }
     .btn {
-      width: 48px; height: 48px; background: rgba(255, 255, 255, 0.15);
+      width: 44px; height: 44px; background: rgba(255, 255, 255, 0.2);
       border: 2px solid rgba(255, 255, 255, 0.4); border-radius: 50%;
-      color: #fff; font-size: 16px; font-weight: bold;
+      color: #fff; font-size: 14px; font-weight: bold;
       display: flex; align-items: center; justify-content: center; touch-action: manipulation;
     }
-    .btn:active { background: rgba(255, 255, 255, 0.4); }
-    .btn-shoot { border-radius: 12px; width: 55px; }
+    .btn:active { background: rgba(255, 255, 255, 0.5); }
+    .btn-shoot { border-radius: 10px; width: 55px; }
     .p1-color { color: #4da6ff; }
     .p2-color { color: #ff4d4d; }
   </style>
@@ -43,8 +43,8 @@
 
   <div id="game-container">
     <div id="scoreboard">
-      <div class="p1-color">P1 HP: <span id="p1Hp">100</span> | Score: <span id="p1Score">0</span></div>
-      <div class="p2-color">P2 HP: <span id="p2Hp">100</span> | Score: <span id="p2Score">0</span></div>
+      <div class="p1-color">P1 (Blue) HP: <span id="p1Hp">100</span> | Score: <span id="p1Score">0</span></div>
+      <div class="p2-color">P2 (Red) HP: <span id="p2Hp">100</span> | Score: <span id="p2Score">0</span></div>
     </div>
 
     <div id="canvas-wrapper">
@@ -56,13 +56,13 @@
           <div class="btn" id="btn-p1-right">►</div>
           <div class="btn" id="btn-p1-jump">▲</div>
           <div class="btn" id="btn-p1-duck">▼</div>
-          <div class="btn btn-shoot p1-color" id="btn-p1-shoot" style="border-color:#4da6ff;">FIRE</div>
+          <div class="btn btn-shoot p1-color" id="btn-p1-shoot" style="border-color:#4da6ff;">FIRE (E)</div>
         </div>
         <div class="control-group">
-          <div class="btn btn-shoot p2-color" id="btn-p2-shoot" style="border-color:#ff4d4d;">FIRE</div>
+          <div class="btn btn-shoot p2-color" id="btn-p2-shoot" style="border-color:#ff4d4d;">FIRE (SPC)</div>
           <div class="btn" id="btn-p2-duck">▼</div>
           <div class="btn" id="btn-p2-jump">▲</div>
-          <div class="btn" id="btn-p1-left2" id="btn-p2-left">◄</div>
+          <div class="btn" id="btn-p2-left">◄</div>
           <div class="btn" id="btn-p2-right">►</div>
         </div>
       </div>
@@ -108,35 +108,32 @@
 
     let bullets = [];
     let obstacles = [];
-    let ragdolls = [];
+    let activeRagdoll = null;
     let roundOverTimer = 0;
-    const FIRE_RATE = 300;
+    const FIRE_RATE = 250;
 
     function generateObstacles() {
-      obstacles = [];
-      const numObstacles = Math.floor(Math.random() * 3) + 2; // 2 to 4 obstacles
-      for (let i = 0; i < numObstacles; i++) {
-        const width = 30 + Math.random() * 25;
-        const height = 60 + Math.random() * 80;
-        const x = 200 + Math.random() * (V_WIDTH - 400 - width);
-        const y = GROUND_Y - height - Math.random() * 100;
-        const vy = (Math.random() - 0.5) * 2; // vertical float speed
-        obstacles.push({ x, y, width, height, vy, minY: 100, maxY: GROUND_Y - height, hp: 15 });
-      }
+      obstacles = [
+        { x: 270, y: GROUND_Y - 110, width: 30, height: 80, vy: 1.2, minY: 100, maxY: GROUND_Y - 80, hp: 15 },
+        { x: 385, y: GROUND_Y - 150, width: 30, height: 100, vy: -1.5, minY: 80, maxY: GROUND_Y - 100, hp: 15 },
+        { x: 500, y: GROUND_Y - 100, width: 30, height: 75, vy: 1.4, minY: 120, maxY: GROUND_Y - 75, hp: 15 }
+      ];
     }
 
     // Keyboard Listeners
     window.addEventListener('keydown', (e) => {
-      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyW', 'KeyS', 'KeyA', 'KeyD', 'KeyE'].includes(e.code)) e.preventDefault();
+      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyW', 'KeyS', 'KeyA', 'KeyD', 'KeyE'].includes(e.code)) {
+        e.preventDefault();
+      }
       
-      // Player 1 (A/D/W/S/E)
+      // Player 1 (A/D/W/S + E)
       if (e.code === 'KeyA') input.p1Left = true;
       if (e.code === 'KeyD') input.p1Right = true;
       if (e.code === 'KeyW') input.p1Jump = true;
       if (e.code === 'KeyS') input.p1Duck = true;
       if (e.code === 'KeyE') input.p1Shoot = true;
 
-      // Player 2 (Arrows/Space)
+      // Player 2 (Arrows + Space)
       if (e.code === 'ArrowLeft') input.p2Left = true;
       if (e.code === 'ArrowRight') input.p2Right = true;
       if (e.code === 'ArrowUp') input.p2Jump = true;
@@ -163,8 +160,8 @@
       if (!btn) return;
       const start = (e) => { e.preventDefault(); input[actionKey] = true; };
       const end = (e) => { e.preventDefault(); input[actionKey] = false; };
-      btn.addEventListener('touchstart', start);
-      btn.addEventListener('touchend', end);
+      btn.addEventListener('touchstart', start, { passive: false });
+      btn.addEventListener('touchend', end, { passive: false });
       btn.addEventListener('mousedown', start);
       btn.addEventListener('mouseup', end);
     }
@@ -174,48 +171,50 @@
     bindTouch('btn-p1-jump', 'p1Jump');
     bindTouch('btn-p1-duck', 'p1Duck');
     bindTouch('btn-p1-shoot', 'p1Shoot');
-    bindTouch('btn-p2-left2', 'p2Left');
+    bindTouch('btn-p2-left', 'p2Left');
     bindTouch('btn-p2-right', 'p2Right');
     bindTouch('btn-p2-jump', 'p2Jump');
     bindTouch('btn-p2-duck', 'p2Duck');
     bindTouch('btn-p2-shoot', 'p2Shoot');
 
-    function createRagdoll(x, y, color, hitDirection) {
-      const parts = [
-        { name: 'head', x: x + 12, y: y, vx: hitDirection * 5, vy: -6, radius: 8 },
-        { name: 'torso', x: x + 12, y: y + 20, vx: hitDirection * 4, vy: -4, radius: 10 },
-        { name: 'lArm', x: x + 5, y: y + 15, vx: hitDirection * 3 - 2, vy: -5, radius: 5 },
-        { name: 'rArm', x: x + 20, y: y + 15, vx: hitDirection * 6 + 2, vy: -3, radius: 5 },
-        { name: 'lLeg', x: x + 8, y: y + 40, vx: hitDirection * 2 - 1, vy: -2, radius: 6 },
-        { name: 'rLeg', x: x + 16, y: y + 40, vx: hitDirection * 5 + 1, vy: -4, radius: 6 }
-      ];
-      ragdolls.push({ parts, color });
+    function triggerRagdoll(p, dir) {
+      const headX = p.x + p.width / 2;
+      const headY = p.y + 10;
+      activeRagdoll = {
+        color: p.color,
+        head: { x: headX, y: headY, vx: dir * 6, vy: -5, r: 8 },
+        torso: { x: headX, y: headY + 20, vx: dir * 4, vy: -3, r: 6 },
+        lHand: { x: headX - 15, y: headY + 15, vx: dir * 2 - 2, vy: -6, r: 4 },
+        rHand: { x: headX + 15, y: headY + 15, vx: dir * 7 + 2, vy: -4, r: 4 },
+        lFoot: { x: headX - 10, y: headY + 45, vx: dir * 3, vy: -2, r: 4 },
+        rFoot: { x: headX + 10, y: headY + 45, vx: dir * 5, vy: -3, r: 4 }
+      };
     }
 
-    function updateRagdolls() {
-      ragdolls.forEach(r => {
-        r.parts.forEach(p => {
-          p.vy += GRAVITY * 0.8;
-          p.x += p.vx;
-          p.y += p.vy;
-          p.vx *= 0.98; // Drag
+    function updateRagdoll() {
+      if (!activeRagdoll) return;
+      const parts = [activeRagdoll.head, activeRagdoll.torso, activeRagdoll.lHand, activeRagdoll.rHand, activeRagdoll.lFoot, activeRagdoll.rFoot];
+      
+      parts.forEach(pt => {
+        pt.vy += GRAVITY;
+        pt.x += pt.vx;
+        pt.y += pt.vy;
+        pt.vx *= 0.97;
 
-          // Ground bounce
-          if (p.y >= GROUND_Y - p.radius) {
-            p.y = GROUND_Y - p.radius;
-            p.vy = -p.vy * 0.4;
-            p.vx *= 0.7;
-          }
-        });
+        if (pt.y >= GROUND_Y - pt.r) {
+          pt.y = GROUND_Y - pt.r;
+          pt.vy = -pt.vy * 0.3;
+          pt.vx *= 0.7;
+        }
       });
     }
 
     function updatePlayer(p, isLeft, isRight, isJump, isDuck, isShoot, direction, minX, maxX) {
       if (p.hp <= 0) return;
 
-      // Horizontal Movement
-      if (isLeft) p.vx = -4;
-      else if (isRight) p.vx = 4;
+      // Free Left/Right Movement
+      if (isLeft) p.vx = -4.5;
+      else if (isRight) p.vx = 4.5;
       else p.vx = 0;
 
       p.x += p.vx;
@@ -237,13 +236,12 @@
         }
       }
 
-      // Jump Logic
+      // Jumping Logic
       if (isJump && p.isGrounded && !p.isDucking) {
-        p.vy = -12;
+        p.vy = -12.5;
         p.isGrounded = false;
       }
 
-      // Gravity Physics
       if (!p.isGrounded) {
         p.vy += GRAVITY;
         p.y += p.vy;
@@ -254,14 +252,14 @@
         }
       }
 
-      // Shooting Logic
+      // Firing Logic
       if (isShoot) {
         const now = Date.now();
         if (now - p.lastShot > FIRE_RATE) {
           bullets.push({
-            x: direction === 1 ? p.x + p.width : p.x,
+            x: direction === 1 ? p.x + p.width : p.x - 12,
             y: p.y + (p.isDucking ? 10 : 18),
-            width: 10, height: 5,
+            width: 12, height: 6,
             speed: 13 * direction,
             color: p.color, owner: p
           });
@@ -275,7 +273,7 @@
       player1.x = 50; player1.y = GROUND_Y - standingHeight;
       player2.x = V_WIDTH - 75; player2.y = GROUND_Y - standingHeight;
       player1.vy = 0; player2.vy = 0;
-      bullets = []; ragdolls = []; roundOverTimer = 0;
+      bullets = []; activeRagdoll = null; roundOverTimer = 0;
       generateObstacles();
       updateUI();
     }
@@ -290,22 +288,22 @@
     function update() {
       if (roundOverTimer > 0) {
         roundOverTimer--;
-        updateRagdolls();
+        updateRagdoll();
         if (roundOverTimer <= 0) resetRound();
         return;
       }
 
-      // Update Moving Obstacles
+      // Move Obstacles
       obstacles.forEach(o => {
         o.y += o.vy;
-        if (o.y < o.minY || o.y > o.maxY) o.vy = -o.vy;
+        if (o.y <= o.minY || o.y >= o.maxY) o.vy = -o.vy;
       });
 
-      // Update Players (Player 1 bounded to left side, Player 2 to right side)
-      updatePlayer(player1, input.p1Left, input.p1Right, input.p1Jump, input.p1Duck, input.p1Shoot, 1, 0, V_WIDTH / 2 - 20);
-      updatePlayer(player2, input.p2Left, input.p2Right, input.p2Jump, input.p2Duck, input.p2Shoot, -1, V_WIDTH / 2 + 20, V_WIDTH);
+      // Update Players (P1 plays left half, P2 plays right half)
+      updatePlayer(player1, input.p1Left, input.p1Right, input.p1Jump, input.p1Duck, input.p1Shoot, 1, 0, V_WIDTH / 2 - 35);
+      updatePlayer(player2, input.p2Left, input.p2Right, input.p2Jump, input.p2Duck, input.p2Shoot, -1, V_WIDTH / 2 + 10, V_WIDTH);
 
-      // Bullet Updates & Collisions
+      // Update Bullets & Collisions
       for (let i = bullets.length - 1; i >= 0; i--) {
         const b = bullets[i];
         b.x += b.speed;
@@ -333,8 +331,8 @@
           updateUI();
           if (player1.hp <= 0) {
             player2.score++;
-            createRagdoll(player1.x, player1.y, player1.color, -1);
-            roundOverTimer = 90; // ~1.5s delay for ragdoll physics
+            triggerRagdoll(player1, -1);
+            roundOverTimer = 100;
           }
           continue;
         }
@@ -348,14 +346,21 @@
           updateUI();
           if (player2.hp <= 0) {
             player1.score++;
-            createRagdoll(player2.x, player2.y, player2.color, 1);
-            roundOverTimer = 90;
+            triggerRagdoll(player2, 1);
+            roundOverTimer = 100;
           }
           continue;
         }
 
         if (b.x < 0 || b.x > V_WIDTH) bullets.splice(i, 1);
       }
+    }
+
+    function drawLimb(p1, p2) {
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.stroke();
     }
 
     function draw() {
@@ -371,22 +376,23 @@
       ctx.fillStyle = '#2b2b2b';
       ctx.fillRect(0, GROUND_Y, V_WIDTH, V_HEIGHT - GROUND_Y);
 
-      // Center Divider
+      // Center Line
       ctx.strokeStyle = '#333';
       ctx.setLineDash([8, 8]);
       ctx.beginPath();
       ctx.moveTo(V_WIDTH / 2, 0); ctx.lineTo(V_WIDTH / 2, GROUND_Y);
       ctx.stroke(); ctx.setLineDash([]);
 
-      // Draw Moving Obstacles
+      // Draw Obstacles
       obstacles.forEach(o => {
-        ctx.fillStyle = '#555';
+        ctx.fillStyle = '#4a5568';
         ctx.fillRect(o.x, o.y, o.width, o.height);
-        ctx.strokeStyle = '#777';
+        ctx.strokeStyle = '#718096';
+        ctx.lineWidth = 2;
         ctx.strokeRect(o.x, o.y, o.width, o.height);
       });
 
-      // Draw Players (If alive)
+      // Draw Players
       if (player1.hp > 0) {
         ctx.fillStyle = player1.color;
         ctx.fillRect(player1.x, player1.y, player1.width, player1.height);
@@ -396,15 +402,23 @@
         ctx.fillRect(player2.x, player2.y, player2.width, player2.height);
       }
 
-      // Draw Ragdolls
-      ragdolls.forEach(r => {
+      // Draw Ragdoll Skeleton
+      if (activeRagdoll) {
+        const r = activeRagdoll;
+        ctx.strokeStyle = r.color;
         ctx.fillStyle = r.color;
-        r.parts.forEach(p => {
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-          ctx.fill();
-        });
-      });
+        ctx.lineWidth = 4;
+
+        drawLimb(r.head, r.torso);
+        drawLimb(r.torso, r.lHand);
+        drawLimb(r.torso, r.rHand);
+        drawLimb(r.torso, r.lFoot);
+        drawLimb(r.torso, r.rFoot);
+
+        ctx.beginPath();
+        ctx.arc(r.head.x, r.head.y, r.head.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
       // Draw Bullets
       bullets.forEach(b => {
