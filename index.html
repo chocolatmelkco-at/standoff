@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>2-Player Mobile & Desktop Duel</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: #111;
+      color: #fff;
+      font-family: system-ui, sans-serif;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      touch-action: none;
+    }
+    #game-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    #scoreboard {
+      height: 40px;
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      background: #181818;
+      font-size: 16px;
+      font-weight: bold;
+      border-bottom: 2px solid #333;
+    }
+    #canvas-wrapper {
+      flex: 1;
+      position: relative;
+      width: 100%;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      background: #222;
+    }
+    /* Mobile Controls */
+    .mobile-controls {
+      position: absolute;
+      bottom: 10px;
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      padding: 0 15px;
+      pointer-events: none;
+    }
+    .control-group {
+      display: flex;
+      gap: 10px;
+      pointer-events: auto;
+    }
+    .btn {
+      width: 55px;
+      height: 55px;
+      background: rgba(255, 255, 255, 0.15);
+      border: 2px solid rgba(255, 255, 255, 0.4);
+      border-radius: 50%;
+      color: #fff;
+      font-size: 18px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: manipulation;
+    }
+    .btn:active {
+      background: rgba(255, 255, 255, 0.4);
+    }
+    .btn-shoot {
+      border-radius: 12px;
+      width: 65px;
+    }
+    .p1-color { color: #4da6ff; }
+    .p2-color { color: #ff4d4d; }
+  </style>
+</head>
+<body>
+
+  <div id="game-container">
+    <div id="scoreboard">
+      <div class="p1-color">P1 HP: <span id="p1Hp">100</span> | Score: <span id="p1Score">0</span></div>
+      <div class="p2-color">P2 HP: <span id="p2Hp">100</span> | Score: <span id="p2Score">0</span></div>
+    </div>
+
+    <div id="canvas-wrapper">
+      <canvas id="gameCanvas"></canvas>
+
+      <!-- Mobile Touch Controls Overlay -->
+      <div class="mobile-controls">
+        <div class="control-group">
+          <div class="btn" id="btn-p1-jump">▲</div>
+          <div class="btn" id="btn-p1-duck">▼</div>
+          <div class="btn btn-shoot p1-color" id="btn-p1-shoot" style="border-color:#4da6ff;">FIRE</div>
+        </div>
+        <div class="control-group">
+          <div class="btn btn-shoot p2-color" id="btn-p2-shoot" style="border-color:#ff4d4d;">FIRE</div>
+          <div class="btn" id="btn-p2-duck">▼</div>
+          <div class="btn" id="btn-p2-jump">▲</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const wrapper = document.getElementById('canvas-wrapper');
+
+    // Internal Virtual Resolution for Physics Calculation
+    const V_WIDTH = 800;
+    const V_HEIGHT = 450;
+    const GROUND_Y = V_HEIGHT - 30;
+    const GRAVITY = 0.6;
+
+    function resizeCanvas() {
+      canvas.width = wrapper.clientWidth;
+      canvas.height = wrapper.clientHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    const input = {
+      p1Jump: false, p1Duck: false, p1Shoot: false,
+      p2Jump: false, p2Duck: false, p2Shoot: false
+    };
+
+    const standingHeight = 60;
+    const duckingHeight = 30;
+
+    const player1 = {
+      x: 50,
+      y: GROUND_Y - standingHeight,
+      vy: 0,
+      width: 25,
+      height: standingHeight,
+      color: '#4da6ff',
+      score: 0,
+      hp: 100,
+      isGrounded: true,
+      isDucking: false,
+      lastShot: 0
+    };
+
+    const player2 = {
+      x: V_WIDTH - 75,
+      y: GROUND_Y - standingHeight,
+      vy: 0,
+      width: 25,
+      height: standingHeight,
+      color: '#ff4d4d',
+      score: 0,
+      hp: 100,
+      isGrounded: true,
+      isDucking: false,
+      lastShot: 0
+    };
+
+    let bullets = [];
+    const FIRE_RATE = 300; // ms
+
+    // Keyboard Listeners
+    window.addEventListener('keydown', (e) => {
+      if (['Space', 'ArrowUp', 'ArrowDown', 'KeyW', 'KeyS'].includes(e.code)) e.preventDefault();
+      if (e.code === 'KeyW') input.p1Jump = true;
+      if (e.code === 'KeyS') input.p1Duck = true;
+      if (e.code === 'Space') input.p1Shoot = true;
+
+      if (e.code === 'ArrowUp') input.p2Jump = true;
+      if (e.code === 'ArrowDown') input.p2Duck = true;
+      if (e.code === 'Enter') input.p2Shoot = true;
+    });
+
+    window.addEventListener('keyup', (e) => {
+      if (e.code === 'KeyW') input.p1Jump = false;
+      if (e.code === 'KeyS') input.p1Duck = false;
+      if (e.code === 'Space') input.p1Shoot = false;
+
+      if (e.code === 'ArrowUp') input.p2Jump = false;
+      if (e.code === 'ArrowDown') input.p2Duck = false;
+      if (e.code === 'Enter') input.p2Shoot = false;
+    });
+
+    // Touch Button Handler Utility
+    function bindTouch(elementId, actionKey) {
+      const btn = document.getElementById(elementId);
+      const start = (e) => { e.preventDefault(); input[actionKey] = true; };
+      const end = (e) => { e.preventDefault(); input[actionKey] = false; };
+      btn.addEventListener('touchstart', start);
+      btn.addEventListener('touchend', end);
+      btn.addEventListener('mousedown', start);
+      btn.addEventListener('mouseup', end);
+    }
+
+    bindTouch('btn-p1-jump', 'p1Jump');
+    bindTouch('btn-p1-duck', 'p1Duck');
+    bindTouch('btn-p1-shoot', 'p1Shoot');
+    bindTouch('btn-p2-jump', 'p2Jump');
+    bindTouch('btn-p2-duck', 'p2Duck');
+    bindTouch('btn-p2-shoot', 'p2Shoot');
+
+    function updatePlayer(p, isJump, isDuck, isShoot, direction) {
+      // Ducking Logic
+      if (isDuck && p.isGrounded) {
+        if (!p.isDucking) {
+          p.isDucking = true;
+          p.height = duckingHeight;
+          p.y = GROUND_Y - duckingHeight;
+        }
+      } else {
+        if (p.isDucking) {
+          p.isDucking = false;
+          p.height = standingHeight;
+          p.y = GROUND_Y - standingHeight;
+        }
+      }
+
+      // Jump Logic
+      if (isJump && p.isGrounded && !p.isDucking) {
+        p.vy = -13;
+        p.isGrounded = false;
+      }
+
+      // Physics Gravity
+      if (!p.isGrounded) {
+        p.vy += GRAVITY;
+        p.y += p.vy;
+
+        if (p.y >= GROUND_Y - p.height) {
+          p.y = GROUND_Y - p.height;
+          p.vy = 0;
+          p.isGrounded = true;
+        }
+      }
+
+      // Shooting Logic
+      if (isShoot) {
+        const now = Date.now();
+        if (now - p.lastShot > FIRE_RATE) {
+          bullets.push({
+            x: direction === 1 ? p.x + p.width : p.x,
+            y: p.y + (p.isDucking ? 10 : 18),
+            width: 12,
+            height: 6,
+            speed: 12 * direction,
+            color: p.color,
+            owner: p
+          });
+          p.lastShot = now;
+        }
+      }
+    }
+
+    function resetRound() {
+      player1.hp = 100;
+      player2.hp = 100;
+      player1.y = GROUND_Y - standingHeight;
+      player2.y = GROUND_Y - standingHeight;
+      player1.vy = 0;
+      player2.vy = 0;
+      bullets = [];
+      updateUI();
+    }
+
+    function updateUI() {
+      document.getElementById('p1Hp').innerText = player1.hp;
+      document.getElementById('p1Score').innerText = player1.score;
+      document.getElementById('p2Hp').innerText = player2.hp;
+      document.getElementById('p2Score').innerText = player2.score;
+    }
+
+    function update() {
+      updatePlayer(player1, input.p1Jump, input.p1Duck, input.p1Shoot, 1);
+      updatePlayer(player2, input.p2Jump, input.p2Duck, input.p2Shoot, -1);
+
+      // Bullet Updates & Collisions
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        const b = bullets[i];
+        b.x += b.speed;
+
+        // Hit Player 1
+        if (b.owner !== player1 && b.x < player1.x + player1.width && b.x + b.width > player1.x &&
+            b.y < player1.y + player1.height && b.y + b.height > player1.y) {
+          player1.hp -= 20;
+          bullets.splice(i, 1);
+          if (player1.hp <= 0) { player2.score++; resetRound(); } else { updateUI(); }
+          continue;
+        }
+
+        // Hit Player 2
+        if (b.owner !== player2 && b.x + b.width > player2.x && b.x < player2.x + player2.width &&
+            b.y < player2.y + player2.height && b.y + b.height > player2.y) {
+          player2.hp -= 20;
+          bullets.splice(i, 1);
+          if (player2.hp <= 0) { player1.score++; resetRound(); } else { updateUI(); }
+          continue;
+        }
+
+        if (b.x < 0 || b.x > V_WIDTH) bullets.splice(i, 1);
+      }
+    }
+
+    function draw() {
+      // Clear screen
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Scale Canvas drawing to match Virtual Resolution
+      const scaleX = canvas.width / V_WIDTH;
+      const scaleY = canvas.height / V_HEIGHT;
+
+      ctx.save();
+      ctx.scale(scaleX, scaleY);
+
+      // Draw Ground
+      ctx.fillStyle = '#333';
+      ctx.fillRect(0, GROUND_Y, V_WIDTH, V_HEIGHT - GROUND_Y);
+
+      // Draw Center Line
+      ctx.strokeStyle = '#444';
+      ctx.setLineDash([8, 8]);
+      ctx.beginPath();
+      ctx.moveTo(V_WIDTH / 2, 0);
+      ctx.lineTo(V_WIDTH / 2, GROUND_Y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Draw Players
+      ctx.fillStyle = player1.color;
+      ctx.fillRect(player1.x, player1.y, player1.width, player1.height);
+
+      ctx.fillStyle = player2.color;
+      ctx.fillRect(player2.x, player2.y, player2.width, player2.height);
+
+      // Draw Bullets
+      bullets.forEach(b => {
+        ctx.fillStyle = b.color;
+        ctx.fillRect(b.x, b.y, b.width, b.height);
+      });
+
+      ctx.restore();
+    }
+
+    function loop() {
+      update();
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
